@@ -658,7 +658,7 @@ dump_file(webs_t wp, char *filename)
 	}
 
 	extensions = strrchr(filename, '.');
-	if (extensions && strcmp(extensions, ".key") == 0) {
+	if (!get_login_safe() && extensions && strcmp(extensions, ".key") == 0) {
 		return websWrite(wp, "%s", "# !!!This is hidden write-only secret key file!!!\n");
 	}
 
@@ -1993,7 +1993,12 @@ static int shadowsocks_action_hook(int eid, webs_t wp, int argc, char **argv)
 		notify_rc(RCN_RESTART_SS_TUNNEL);
 	} else if (!strcmp(ss_action, "Update_gfwlist")) {
 		notify_rc(RCN_RESTART_GFWLIST_UPD);
+	}else if (!strcmp(ss_action, "Update_dlink")) {
+		notify_rc(RCN_RESTART_DLINK);
+	}else if (!strcmp(ss_action, "Reset_dlink")) {
+		notify_rc(RCN_RESTART_REDLINK);
 	}
+	
 	websWrite(wp, "<script>restart_needed_time(%d);</script>\n", needed_seconds);
 	return 0;
 }
@@ -2007,9 +2012,23 @@ static int shadowsocks_status_hook(int eid, webs_t wp, int argc, char **argv)
 	if (ss_status_code == 0){
 		ss_status_code = pids("v2ray");
 	}
+
+	if (ss_status_code == 0){
+		ss_status_code = pids("trojan");
+	}
+	if (ss_status_code == 0){
+		ss_status_code = pids("kumasocks");
+	}
 	websWrite(wp, "function shadowsocks_status() { return %d;}\n", ss_status_code);
 	int ss_tunnel_status_code = pids("ss-local");
 	websWrite(wp, "function shadowsocks_tunnel_status() { return %d;}\n", ss_tunnel_status_code);
+	int ss_mode = nvram_get_int("ss_enable");
+	int ss_check_code = 2;
+	if ( ss_mode == 1)
+	{
+	ss_check_code = nvram_get_int("check_mode");
+	}
+	websWrite(wp, "function shadowsocks_check_status() { return %d;}\n", ss_check_code);
 	return 0;
 }
 
@@ -2030,7 +2049,7 @@ static int rules_count_hook(int eid, webs_t wp, int argc, char **argv)
 	websWrite(wp, "function chnroute_count() { return '%s';}\n", count);
 #if defined(APP_SHADOWSOCKS)
 	memset(count, 0, sizeof(count));
-	fstream = popen("grep ^server /etc/storage/gfwlist/gfwlist_list.conf |wc -l","r");
+	fstream = popen("cat /etc/storage/gfwlist/gfwlist_list.conf |wc -l","r");
 	if(fstream) {
 		fgets(count, sizeof(count), fstream);
 		pclose(fstream);
@@ -2055,6 +2074,26 @@ static int dnsforwarder_status_hook(int eid, webs_t wp, int argc, char **argv)
 }
 #endif
 
+#if defined (APP_KOOLPROXY)
+static int koolproxy_action_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	int needed_seconds = 3;
+	char *kp_action = websGetVar(wp, "connect_action", "");
+	
+	if (!strcmp(kp_action, "resetkp")) {
+		notify_rc(RCN_RESTART_KPUPDATE);
+	}
+	websWrite(wp, "<script>restart_needed_time(%d);</script>\n", needed_seconds);
+	return 0;
+}
+
+static int koolproxy_status_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	int kp_status_code = pids("koolproxy");
+	websWrite(wp, "function koolproxy_status() { return %d;}\n", kp_status_code);
+	return 0;
+}
+#endif
 
 #if defined (APP_ADBYBY)
 static int adbyby_action_hook(int eid, webs_t wp, int argc, char **argv)
@@ -2093,22 +2132,41 @@ static int smartdns_status_hook(int eid, webs_t wp, int argc, char **argv)
 	websWrite(wp, "function smartdns_status() { return %d;}\n", smartdns_status_code);
 	return 0;
 }
-static int smartdns_version_hook(int eid, webs_t wp, int argc, char **argv)
+#endif
+
+#if defined (APP_CADDY)
+static int caddy_status_hook(int eid, webs_t wp, int argc, char **argv)
 {
-	FILE *fstream = NULL;
-	char ver[18];
-	memset(ver, 0, sizeof(ver));
-	fstream = popen("/tmp/smartdns -v | awk '{printf $2}'","r");
-	if(fstream) {
-		fgets(ver, sizeof(ver), fstream);
-		pclose(fstream);
-	} else {
-		sprintf(ver, "%s", "unknown");
-	}
-	websWrite(wp, "function smartdns_version() { return '%s';}\n", ver);
+	int caddy_status_code = pids("caddy_filebrowser");
+	websWrite(wp, "function caddy_status() { return %d;}\n", caddy_status_code);
 	return 0;
 }
 #endif
+
+#if defined (APP_FRP)
+static int frpc_status_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	int frpc_status_code = pids("frpc");
+	websWrite(wp, "function frpc_status() { return %d;}\n", frpc_status_code);
+	return 0;
+}
+static int frps_status_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	int frps_status_code = pids("frps");
+	websWrite(wp, "function frps_status() { return %d;}\n", frps_status_code);
+	return 0;
+}
+#endif
+
+static int update_action_hook(int eid, webs_t wp, int argc, char **argv)
+{
+	char *up_action = websGetVar(wp, "connect_action", "");
+	
+	if (!strcmp(up_action, "bigtmp")) {
+		system("mount -t tmpfs -o remount,rw,size=50M tmpfs /tmp");
+	}
+	return 0;
+}
 
 static int
 ej_detect_internet_hook(int eid, webs_t wp, int argc, char **argv)
@@ -2294,6 +2352,21 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 #else
 	int found_app_shadowsocks = 0;
 #endif
+#if defined(APP_KOOLPROXY)
+	int found_app_koolproxy = 1;
+#else
+	int found_app_koolproxy = 0;
+#endif
+#if defined(APP_ADGUARDHOME)
+	int found_app_adguardhome = 1;
+#else
+	int found_app_adguardhome = 0;
+#endif
+#if defined(APP_CADDY)
+	int found_app_caddy = 1;
+#else
+	int found_app_caddy = 0;
+#endif
 #if defined(APP_ADBYBY)
 	int found_app_adbyby = 1;
 #else
@@ -2303,6 +2376,11 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 	int found_app_smartdns = 1;
 #else
 	int found_app_smartdns = 0;
+#endif
+#if defined(APP_FRP)
+	int found_app_frp = 1;
+#else
+	int found_app_frp = 0;
 #endif
 #if defined(APP_ALIDDNS)
 	int found_app_aliddns = 1;
@@ -2318,11 +2396,6 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 	int found_app_xupnpd = 1;
 #else
 	int found_app_xupnpd = 0;
-#endif
-#if defined (WEBUI_HIDE_VPN)
-	int support_vpn = 0;
-#else
-	int support_vpn = 1;
 #endif
 #if defined(USE_IPV6)
 	int has_ipv6 = 1;
@@ -2483,8 +2556,12 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 		"function found_app_napt66() { return %d;}\n"
 		"function found_app_dnsforwarder() { return %d;}\n"
 		"function found_app_shadowsocks() { return %d;}\n"
+		"function found_app_koolproxy() { return %d;}\n"
+		"function found_app_adguardhome() { return %d;}\n"
+		"function found_app_caddy() { return %d;}\n"
 		"function found_app_adbyby() { return %d;}\n"
 		"function found_app_smartdns() { return %d;}\n"
+		"function found_app_frp() { return %d;}\n"
 		"function found_app_aliddns() { return %d;}\n"
 		"function found_app_xupnpd() { return %d;}\n"
 		"function found_app_mentohust() { return %d;}\n",
@@ -2508,8 +2585,12 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 		found_app_napt66,
 		found_app_dnsforwarder,
 		found_app_shadowsocks,
+		found_app_koolproxy,
+		found_app_adguardhome,
+		found_app_caddy,
 		found_app_adbyby,
 		found_app_smartdns,
+		found_app_frp,
 		found_app_aliddns,
 		found_app_xupnpd,
 		found_app_mentohust
@@ -2551,8 +2632,7 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 		"function support_5g_mumimo() { return %d;}\n"
 		"function support_sfe() { return %d;}\n"
 		"function support_lan_ap_isolate() { return %d;}\n"
-		"function support_5g_160mhz() { return %d;}\n"
-		"function support_vpn() { return %d;}\n",
+		"function support_5g_160mhz() { return %d;}\n",
 		has_ipv6,
 		has_ipv6_ppe,
 		has_ipv4_ppe,
@@ -2588,8 +2668,7 @@ ej_firmware_caps_hook(int eid, webs_t wp, int argc, char **argv)
 		has_5g_mumimo,
 		has_sfe,
 		has_lan_ap_isolate,
-		has_5g_160mhz,
-		support_vpn
+		has_5g_160mhz
 	);
 
 	return 0;
@@ -2924,7 +3003,6 @@ static int ej_get_flash_time(int eid, webs_t wp, int argc, char **argv)
 	return 0;
 }
 
-#ifndef WEBUI_HIDE_VPN
 static int ej_get_vpns_client(int eid, webs_t wp, int argc, char **argv)
 {
 	FILE *fp;
@@ -2950,7 +3028,6 @@ static int ej_get_vpns_client(int eid, webs_t wp, int argc, char **argv)
 
 	return 0;
 }
-#endif
 
 struct cpu_stats {
 	unsigned long long user;    // user (application) usage
@@ -3268,7 +3345,16 @@ apply_cgi(const char *url, webs_t wp)
 	}
 	else if (!strcmp(value, " Reboot "))
 	{
-		sys_reboot();
+	    int reboot_mode = nvram_get_int("reboot_mode");
+	    if ( reboot_mode == 0)
+	{
+	    sys_reboot();
+	}
+	else if ( reboot_mode == 1)
+	{
+		doSystem("/sbin/mtd_storage.sh %s", "save");
+		system("mtd_write -r unlock mtd1");
+	}
 		return 0;
 	}
 	else if (!strcmp(value, " Shutdown "))
@@ -3865,6 +3951,15 @@ static char mentohust_log_txt[] =
 
 #endif
 
+#if defined (APP_KOOLPROXY)
+static void
+do_kp_crt_file(const char *url, FILE *stream)
+{
+    dump_file(stream, "/etc/storage/koolproxy/ca.crt");
+	fputs("\r\n", stream);
+}
+#endif
+
 struct mime_handler mime_handlers[] = {
 	/* cached javascript files w/o translations */
 	{ "jquery.js", "text/javascript", NULL, NULL, do_file, 0 }, // 2012.06 Eagle23
@@ -3906,6 +4001,9 @@ struct mime_handler mime_handlers[] = {
 	{ "Settings_**.CFG", "application/force-download", NULL, NULL, do_nvram_file, 1 },
 	{ "Storage_**.TBZ", "application/force-download", NULL, NULL, do_storage_file, 1 },
 	{ "syslog.txt", "application/force-download", syslog_txt, NULL, do_syslog_file, 1 },
+#if defined(APP_KOOLPROXY)
+	{ "kp_ca.crt", "application/force-download", NULL, NULL, do_kp_crt_file, 1 },
+#endif
 #if defined(APP_SCUT)
 	{ "scutclient.log", "application/force-download", scutclient_log_txt, NULL, do_scutclient_log_file, 1 },
 #endif
@@ -3915,6 +4013,7 @@ struct mime_handler mime_handlers[] = {
 #if defined(APP_OPENVPN)
 	{ "client.ovpn", "application/force-download", NULL, NULL, do_export_ovpn_client, 1 },
 #endif
+
 
 	/* no-cached POST objects */
 	{ "update.cgi*", "text/javascript", no_cache_IE, do_html_apply_post, do_update_cgi, 1 },
@@ -4217,8 +4316,15 @@ struct ej_handler ej_handlers[] =
 	{ "rules_count", rules_count_hook},
 	{ "pdnsd_status", pdnsd_status_hook},
 #endif
+#if defined (APP_KOOLPROXY)
+	{ "koolproxy_action", koolproxy_action_hook},
+	{ "koolproxy_status", koolproxy_status_hook},
+#endif
 #if defined(APP_DNSFORWARDER)
 	{ "dnsforwarder_status", dnsforwarder_status_hook},
+#endif
+#if defined(APP_CADDY)
+	{ "caddy_status", caddy_status_hook},
 #endif
 #if defined (APP_ADBYBY)
 	{ "adbyby_action", adbyby_action_hook},
@@ -4226,8 +4332,12 @@ struct ej_handler ej_handlers[] =
 #endif
 #if defined (APP_SMARTDNS)
 	{ "smartdns_status", smartdns_status_hook},
-	{ "smartdns_version", smartdns_version_hook},
 #endif
+#if defined (APP_FRP)
+	{ "frpc_status", frpc_status_hook},
+	{ "frps_status", frps_status_hook},
+#endif
+    { "update_action", update_action_hook},
 	{ "openssl_util_hook", openssl_util_hook},
 	{ "openvpn_srv_cert_hook", openvpn_srv_cert_hook},
 	{ "openvpn_cli_cert_hook", openvpn_cli_cert_hook},

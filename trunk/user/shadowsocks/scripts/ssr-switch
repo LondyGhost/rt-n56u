@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2017 openwrt-ssr
 # Copyright (C) 2017 yushi studio <ywb94@qq.com>
-# Copyright (C) 2019 bkye
+# Copyright (C) 2019 chongshengB
 #
 # This is free software, licensed under the GNU General Public License v3.
 # See /LICENSE for more information.
@@ -15,128 +15,67 @@ server_locate=0
 NAME=shadowsocksr
 ENABLE_SERVER=nil
 CONFIG_SWTICH_FILE=/tmp/${NAME}_t.json
-China_ping_domain="www.qq.com"
-Foreign_wget_domain="http://www.google.com/"
 server_count=0
+current_ret=""
 [ -n "$2" ] && cycle_time=$2
 [ -n "$3" ] && switch_time=$3
 
 DEFAULT_SERVER=$(nvram get global_server)
 CURRENT_SERVER=$DEFAULT_SERVER
+BACKUP_SERVER=$(nvram get backup_server)
 
-#ÅÐ¶Ï´úÀíÊÇ·ñÕý³£
 check_proxy() {
-wget --spider --quiet --timeout=3 $Foreign_wget_domain > /dev/null 2>&1
-if [ "$?" == "0" ]; then
- return 0
-else
-/bin/ping -c 3 $China_ping_domain -w 5 >/dev/null 2>&1
- if [ "$?" == "0" ]; then
- #goole²»Í¨baiduÍ¨Ôò²»Õý³£
- return 1
- else
- return 2
- fi
-fi
-return 0
+  result=0
+  for i in $(seq 1 3)
+  do
+    /usr/bin/ss-check www.google.com 80 $switch_time 1
+    check=$?
+    if [ "$check" == "0" ]; then
+      # echo "$(date "+%Y-%m-%d %H:%M:%S") Check Google Proxy Success, count=$i" >> /tmp/ssrplus.log
+      result=0
+      break
+    else
+    	/usr/bin/ss-check www.youtube.com 80 $switch_time 1
+    check=$?
+    if [ "$check" == "0" ]; then
+      # echo "$(date "+%Y-%m-%d %H:%M:%S") Check Google Proxy Success, count=$i" >> /tmp/ssrplus.log
+      result=0
+      break
+    else
+      # echo "$(date "+%Y-%m-%d %H:%M:%S") Check Google Proxy Fail, count=$i" >> /tmp/ssrplus.log
+      /usr/bin/ss-check www.baidu.com 80 $switch_time 1
+      check=$?
+      if [ "$check" == "0" ]; then
+        result=1
+      else
+        result=2
+      fi
+    fi
+    fi
+    sleep 20;
+  done
+  current_ret=$result;
 }
-
-
-test_proxy() {
-servername=$(nvram get ssp_server_x$1)
-serverport=$(nvram get ssp_prot_x$1)
-ret=$(ping -c 3 $servername  | grep 'loss' | awk -F ',' '{ print $3 }' | awk -F "%" '{ print $1 }') 
-ret=$?
-if [ "$ret" = "0" ] ;then
-return 0
-else
-return 1
-fi
-}
-
-search_proxy() {
-num=`nvram get ssp_staticnum_x`
-if [ $num = "0"] || [ $num = "1" ]; then
-echo "$(date "+%Y-%m-%d %H:%M:%S") ShadowsocksR no server" >> /tmp/ssrplus.log
-return 0
-fi
-dserver=`nvram get ssp_server_x$DEFAULT_SERVER`
-if [ $server_count != "0" ]; then
-	j=`expr $server_count + 1`
-	else
-	j=$server_count
-	fi
-for i in $(seq 1 $num)
-	do
-		server=`nvram get ssp_server_x$j`
-		switch_enable=`nvram get switch_enable_x$j`
-if [ $server != $dserver ]; then
-if [ $switch_enable = "1" ]; then
-if test_proxy $j; then
-echo "$(date "+%Y-%m-%d %H:%M:%S") Another server is avilable, now switching server." >> /tmp/ssrplus.log
-/usr/bin/shadowsocks.sh reserver $j &
-server_count=$j
-echo "$(date "+%Y-%m-%d %H:%M:%S") ShadowsocksR server switch OK" >> /tmp/ssrplus.log
-break
-#return 0
-fi
-fi
-fi
-if [ $j > $i ]; then
-j="0"
-else
-j=`expr $j + 1`
-fi
-done
-}
-
-
 
 a_start() {
-#²»Ö§³ÖkcptunÆôÓÃÊ±µÄÇÐ»»
-[ $(nvram get kcp_enable) = "1"  ]  && return 1
-
-while [ "1" = "1" ]  #ËÀÑ­»·
-do 
-   sleep $cycle_time
-   
-   LOGTIME=$(date "+%Y-%m-%d %H:%M:%S")
-    
-   
-   #ÅÐ¶Ïµ±Ç°´úÀíÊÇ·ñÎªÈ±Ê¡·þÎñÆ÷
-   if [ "$CURRENT_SERVER" != "$DEFAULT_SERVER" ] ;then
-   #echo "not default proxy"
-   echo "$(date "+%Y-%m-%d %H:%M:%S") Current server is not default Main server, try to switch back." >> /tmp/ssrplus.log
-
-     #¼ì²éÈ±Ê¡·þÎñÆ÷ÊÇ·ñÕý³£
-     if test_proxy $DEFAULT_SERVER  ;then
-       #echo "switch to default proxy"
-       echo "$(date "+%Y-%m-%d %H:%M:%S") Main server is avilable." >> /tmp/ssrplus.log
-       #È±Ê¡·þÎñÆ÷Õý³££¬ÇÐ»»»ØÀ´
-/usr/bin/shadowsocks.sh reserver $DEFAULT_SERVER
-       echo "switch to default ["$(uci_get_by_name $CURRENT_SERVER server)"] proxy!"  >> /tmp/ssrplus.log
-       continue
-     else
-       echo "$(date "+%Y-%m-%d %H:%M:%S") Main server is NOT avilable.Continue using current server." >> /tmp/ssrplus.log
-     fi
-    fi
-
-   #ÅÐ¶Ïµ±Ç°´úÀíÊÇ·ñÕý³£
-   check_proxy  
-   current_ret=$?
-  
-   if [ "$current_ret" = "1" ] ;then
-     #µ±Ç°´úÀí´íÎó£¬ÅÐ¶ÏÓÐÎÞ¿ÉÓÃµÄ·þÎñÆ÷
-     #echo "current error"
-     echo "$(date "+%Y-%m-%d %H:%M:%S") Current server error, try to switch another server." >> /tmp/ssrplus.log
-     search_proxy
-     #select_proxy
-   else
-    normal_flag=0 
-    echo "$(date "+%Y-%m-%d %H:%M:%S") ShadowsocksR No Problem."  >> /tmp/ssrplus.log
-   fi
-
-
+while [ "1" = "1" ]  #æ­»å¾ªçŽ¯
+do
+	sleep $cycle_time
+	check_proxy
+    current_ret = $?
+if [ "$current_ret" = "1" ] ;then
+#å½“å‰ä»£ç†é”™è¯¯ï¼Œåˆ¤æ–­æœ‰æ— å¯ç”¨çš„æœåŠ¡å™¨
+if [ $(nvram get check_mode) = "1" ];then
+	echo "$(date "+%Y-%m-%d %H:%M:%S") å¤‡ç”¨æœåŠ¡å™¨ä¹Ÿæ•…éšœäº†,è¯·æ£€æµ‹ä¸»å¤‡æœåŠ¡å™¨æ˜¯å¦æ­£å¸¸ï¼" >> /tmp/ssrplus.log
+	nvram set ss_enable=0
+	nvram set check_mode=0
+	/usr/bin/shadowsocks.sh stop &
+	exit 0
+fi
+echo "$(date "+%Y-%m-%d %H:%M:%S") æ£€æµ‹åˆ°ä¸»æœåŠ¡å™¨æ•…éšœï¼Œåˆ‡æ¢åˆ°å¤‡ç”¨æœåŠ¡å™¨ã€‚" >> /tmp/ssrplus.log
+nvram set check_mode=1
+/usr/bin/shadowsocks.sh reserver &
+fi
 done
 }
 
@@ -146,9 +85,5 @@ start)
 	;;
 stop)
 	a_close
-	;;
-*)
-	echo "check"
-	#exit 0
 	;;
 esac
