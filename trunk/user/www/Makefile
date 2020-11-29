@@ -131,6 +131,18 @@ endif
 	rm -f $(ROMFS_DIR)/www/bootstrap/js/jquery.backgroundpos.min.js
 	rm -f $(ROMFS_DIR)/www/bootstrap/js/jquery.easing.1.3.js
 	rm -f $(ROMFS_DIR)/www/bootstrap/css/bootstrap.css
+ifeq ($(BOARD_HAS_2G_RADIO),0)
+	rm -f $(INSTALLDIR)/www/Advanced_ACL2g_Content.asp
+	rm -f $(INSTALLDIR)/www/Advanced_WAdvanced2g_Content.asp
+	rm -f $(INSTALLDIR)/www/Advanced_WGuest2g_Content.asp
+	rm -f $(INSTALLDIR)/www/Advanced_Wireless2g_Content.asp
+	rm -f $(INSTALLDIR)/www/Advanced_WMode2g_Content.asp
+	rm -f $(INSTALLDIR)/www/Advanced_WSecurity2g_Content.asp
+	rm -f $(INSTALLDIR)/www/Main_WStatus2g_Content.asp
+	rm -f $(INSTALLDIR)/www/wireless_2g.js
+	rm -f $(INSTALLDIR)/www/wds_aplist_2g.asp
+	rm -f $(INSTALLDIR)/www/device-map/router2g.asp
+endif
 ifeq ($(BOARD_HAS_5G_RADIO),0)
 	rm -f $(INSTALLDIR)/www/Advanced_ACL_Content.asp
 	rm -f $(INSTALLDIR)/www/Advanced_WAdvanced_Content.asp
@@ -187,6 +199,7 @@ ifneq ($(CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS),y)
 	rm -f $(INSTALLDIR)/www/Shadowsocks_action.asp
 	rm -f $(INSTALLDIR)/www/Shadowsocks_log.asp
 endif
+
 ifeq ($(CONFIG_FIRMWARE_WEBUI_HIDE_VPN),y)
 	rm -f $(INSTALLDIR)/www/vpn_clients.asp
 	rm -f $(INSTALLDIR)/www/vpncli.asp
@@ -198,5 +211,24 @@ endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIDDNS),y)
 	rm -f $(INSTALLDIR)/www/Advanced_aliddns.asp
 endif
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME),y)
+	rm -f $(INSTALLDIR)/www/Advanced_adguardhome.asp
+endif
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_KOOLPROXY),y)
+	rm -f $(INSTALLDIR)/www/Advanced_koolproxy.asp
+endif
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_CADDY),y)
+	rm -f $(INSTALLDIR)/www/Advanced_caddy.asp
+endif
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_WYY),y)
+	rm -f $(INSTALLDIR)/www/Advanced_wyy.asp
+endif
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_ZEROTIER),y)
+	rm -f $(INSTALLDIR)/www/Advanced_zerotier.asp
+endif
+ifeq ($(CONFIG_FIRMWARE_INCLUDE_FRPC)_$(CONFIG_FIRMWARE_INCLUDE_FRPS), n_n)
+	rm -f $(INSTALLDIR)/www/Advanced_frp.asp
+endif
+
 clean:
 	@echo "Clean www romfs"

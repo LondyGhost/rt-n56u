@@ -799,6 +799,12 @@ LED_CONTROL(int gpio_led, int flag)
 #endif
 #endif
 	{
+#if defined (BOARD_HC5761A)
+		if (gpio_led == BOARD_GPIO_LED_SW5G) {
+			cpu_gpio_mode_set_bit(40, 1);
+			cpu_gpio_mode_set_bit(41, 0);
+		}
+#endif
 		if (is_soft_blink)
 			cpu_gpio_led_enabled(gpio_led, (flag == LED_OFF) ? 0 : 1);
 		
@@ -812,11 +818,6 @@ init_crontab(void)
 	int ret = 0; //no change
 #if defined (APP_SCUT)
 	ret |= system("/sbin/check_crontab.sh a/1 a a a a scutclient_watchcat.sh");
-#endif
-#if defined (APP_SHADOWSOCKS)
-	ret |= system("/sbin/check_crontab.sh a/5 a a a a ss-watchcat.sh");
-	ret |= system("/sbin/check_crontab.sh 0 8 a/10 a a update_chnroute.sh");
-	ret |= system("/sbin/check_crontab.sh 0 7 a/10 a a update_gfwlist.sh");
 #endif
 	return ret;
 }
@@ -894,6 +895,13 @@ init_router(void)
 	if (log_remote)
 		start_logger(1);
 
+#if defined (BOARD_HC5761A)
+	cpu_gpio_mode_set_bit(38, 1);
+	cpu_gpio_mode_set_bit(39, 0);
+	cpu_gpio_set_pin_direction(BOARD_GPIO_PWR_USB, 1);
+	cpu_gpio_set_pin(BOARD_GPIO_PWR_USB, BOARD_GPIO_PWR_USB_ON);
+#endif
+
 	start_dns_dhcpd(is_ap_mode);
 #if defined (APP_SMBD) || defined (APP_NMBD)
 	start_wins();
@@ -921,8 +929,10 @@ init_router(void)
 		restart_crond();
 	}
 	// system ready
+	nvram_set_int("ntp_ready", 0);
 	system("/usr/bin/copyscripts.sh &");
 	system("/etc/storage/started_script.sh &");
+	system("/usr/bin/autostart.sh &");
 }
 
 /*
@@ -1280,11 +1290,41 @@ handle_notifications(void)
 		{
 			update_gfwlist();
 		}
+		else if (strcmp(entry->d_name, RCN_RESTART_DLINK) == 0)
+		{
+			update_dlink();
+		}
+		else if (strcmp(entry->d_name, RCN_RESTART_REDLINK) == 0)
+		{
+			reset_dlink();
+		}
 #endif
 #if defined(APP_VLMCSD)
 		else if (strcmp(entry->d_name, RCN_RESTART_VLMCSD) == 0)
 		{
 			restart_vlmcsd();
+		}
+#endif
+#if defined(APP_WYY)
+		else if (strcmp(entry->d_name, RCN_RESTART_WYY) == 0)
+		{
+			restart_wyy();
+		}
+#endif
+#if defined(APP_ZEROTIER)
+		else if (strcmp(entry->d_name, RCN_RESTART_ZEROTIER) == 0)
+		{
+			restart_zerotier();
+		}
+#endif
+#if defined(APP_KOOLPROXY)
+		else if (strcmp(entry->d_name, RCN_RESTART_KOOLPROXY) == 0)
+		{
+			restart_koolproxy();
+		}
+		else if (strcmp(entry->d_name, RCN_RESTART_KPUPDATE) == 0)
+		{
+			update_kp();
 		}
 #endif
 #if defined(APP_ADBYBY)
@@ -1297,10 +1337,28 @@ handle_notifications(void)
 			update_adb();
 		}
 #endif
+#if defined(APP_ADGUARDHOME)
+		else if (strcmp(entry->d_name, RCN_RESTART_ADGUARDHOME) == 0)
+		{
+			restart_adguardhome();
+		}
+#endif
 #if defined(APP_SMARTDNS)
 		else if (strcmp(entry->d_name, RCN_RESTART_SMARTDNS) == 0)
 		{
 			restart_smartdns();
+		}
+#endif
+#if defined(APP_FRP)
+		else if (strcmp(entry->d_name, RCN_RESTART_FRP) == 0)
+		{
+			restart_frp();
+		}
+#endif
+#if defined(APP_CADDY)
+		else if (strcmp(entry->d_name, RCN_RESTART_CADDY) == 0)
+		{
+			restart_caddy();
 		}
 #endif
 #if defined(APP_ALIDDNS)
@@ -1646,7 +1704,7 @@ main(int argc, char **argv)
 	}
 
 	if (!strcmp(base, "reboot")) {
-		return sys_exit();
+	    return sys_exit();
 	}
 
 	if (!strcmp(base, "shutdown") || !strcmp(base, "halt")) {

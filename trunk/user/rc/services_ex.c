@@ -260,7 +260,7 @@ fill_dnsmasq_servers(void)
 	}
 
 	/* fill from user dnsmasq.servers */
-	load_user_config(fp, storage_dir, "dnsmasq.servers", NULL);
+	//load_user_config(fp, storage_dir, "dnsmasq.servers", NULL);
 
 	fclose(fp);
 
@@ -292,7 +292,7 @@ int
 start_dns_dhcpd(int is_ap_mode)
 {
 	FILE *fp;
-	int i_verbose, i_dhcp_enable, is_dhcp_used, is_dns_used;
+	int i_verbose, i_dhcp_enable, is_dhcp_used, is_dns_used, filter_aaaa, min_ttl;
 	char dhcp_start[32], dhcp_end[32], dns_all[64], dnsv6[40];
 	char *ipaddr, *netmask, *gw, *dns1, *dns2, *dns3, *wins, *domain, *dns6;
 	const char *storage_dir = "/etc/storage/dnsmasq";
@@ -345,6 +345,7 @@ start_dns_dhcpd(int is_ap_mode)
 		fprintf(fp, "cache-size=%d\n", DNS_RELAY_CACHE_MAX);
 		fprintf(fp, "addn-hosts=%s/hosts\n", storage_dir);
 		fprintf(fp, "servers-file=%s\n", DNS_SERVERS_FILE);
+		fprintf(fp, "dhcp-hostsfile=%s/dhcp.conf\n", storage_dir);
 	} else {
 		is_dns_used = 0;
 		fprintf(fp, "cache-size=%d\n", 0);
@@ -497,7 +498,7 @@ start_dns_dhcpd(int is_ap_mode)
 
 	fprintf(fp, "conf-file=%s/dnsmasq.conf\n", storage_dir);
 	fclose(fp);
-
+    doSystem("/usr/bin/dnsmasq.sh");
 	if (is_dns_used)
 		fill_dnsmasq_servers();
 
